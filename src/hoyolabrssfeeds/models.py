@@ -115,7 +115,6 @@ class FeedItem(MyBaseModel):
     summary: Optional[str] = None
     game: Optional[Game] = None
 
-    # --- normalization helpers for MonitorRSS rendering ---
     @staticmethod
     def _normalize_text(text: Optional[str]) -> Optional[str]:
         if text is None:
@@ -143,21 +142,23 @@ class FeedItem(MyBaseModel):
         # Strip any remaining tags
         text = re.sub(r"<[^>]+>", "", text)
 
-        # Hoyolab glyph bullets → newline bullets
-        text = text.replace("▌", "\n• ").replace("■", "\n• ")
+        # Ensure a newline *before* any bullet glyph that isn't already at line start
+        # (turns "... follows. • Version 3.6 ..." into "... follows.\n• Version 3.6 ...")
+        text = re.sub(r"(?<!^)(?<!\n)\s*[•●▌■]\s*", r"\n• ", text)
 
-        # INSERT MISSING SPACE after punctuation when next char is a letter/number
-        # e.g., "Destiny.After" → "Destiny. After"
-        text = re.sub(r"([.!?;:])(?!\s)(?=[A-Za-z0-9])", r"\1 ", text)
+        # Collapse multiple spaces around bullet marker
+        text = re.sub(r"\n•\s+", "\n• ", text)
+
+        # Insert a missing space after punctuation ONLY when followed by a LETTER
+        # Avoids "3. 6" and "03: 59" artifacts (digits after punctuation)
+        text = re.sub(r"(?<!\d)([.!?;:])(?!\s)(?=[A-Za-z])", r"\1 ", text)
 
         # Normalize whitespace: collapse 3+ newlines to 2; collapse 2+ spaces to 1
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
 
-        # Tidy bullets: avoid lines that start with "•" immediately followed by punctuation
-        text = re.sub(r"\n•\s*([.;,:])", r"\n\1", text)
-
         return text.strip()
+
     @validator("content", pre=True)
     def _content_to_newlines(cls, v: Optional[str]) -> Optional[str]:
         return cls._normalize_text(v)
