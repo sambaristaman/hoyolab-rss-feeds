@@ -130,30 +130,19 @@ class FeedItem(MyBaseModel):
         # <br> variants → newline
         text = re.sub(r"(?i)<br\s*/?>", "\n", text)
 
-        # Paragraphs: </p><p> → blank line; drop remaining <p> tags
-        text = re.sub(r"(?i)</p>\s*<p>", "\n\n", text)
-        text = re.sub(r"(?i)</?p[^>]*>", "", text)
+        # Paragraphs: close tag -> blank line; drop opening tags
+        text = re.sub(r"(?i)</p>", "\n\n", text)
+        text = re.sub(r"(?i)<p[^>]*>", "", text)
 
-        # Lists: <li>…</li>, drop <ul>/<ol>
+        # Lists: <li>…</li> → bullet points; drop <ul>/<ol>
         text = re.sub(r"(?i)<li[^>]*>\s*", "• ", text)
         text = re.sub(r"(?i)</li>\s*", "\n", text)
         text = re.sub(r"(?i)</?(ul|ol)[^>]*>", "", text)
 
-        # Strip any remaining tags
-        text = re.sub(r"<[^>]+>", "", text)
+        # Preserve <a> and <img> tags, remove others
+        text = re.sub(r"<(?!/?(a|img)(\s|>))[^\>]+>", "", text)
 
-        # Ensure a newline *before* any bullet glyph that isn't already at line start
-        # (turns "... follows. • Version 3.6 ..." into "... follows.\n• Version 3.6 ...")
-        text = re.sub(r"(?<!^)(?<!\n)\s*[•●▌■]\s*", r"\n• ", text)
-
-        # Collapse multiple spaces around bullet marker
-        text = re.sub(r"\n•\s+", "\n• ", text)
-
-        # Insert a missing space after punctuation ONLY when followed by a LETTER
-        # Avoids "3. 6" and "03: 59" artifacts (digits after punctuation)
-        text = re.sub(r"(?<!\d)([.!?;:])(?!\s)(?=[A-Za-z])", r"\1 ", text)
-
-        # Normalize whitespace: collapse 3+ newlines to 2; collapse 2+ spaces to 1
+        # Tidy whitespace: collapse multiple newlines
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
 
@@ -166,6 +155,7 @@ class FeedItem(MyBaseModel):
     @validator("summary", pre=True)
     def _summary_to_newlines(cls, v: Optional[str]) -> Optional[str]:
         return cls._normalize_text(v)
+
 
 class FeedItemMeta(MyBaseModel):
     id: int
