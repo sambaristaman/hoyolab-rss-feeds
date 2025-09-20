@@ -75,6 +75,38 @@ class GameFeed:
 
         return cls(feed_config.feed_meta, writers, loader)
 
+    async def fetch_items(
+        self, session: Optional[aiohttp.ClientSession] = None
+    ) -> List[FeedItem]:
+        """
+        Fetch latest (and possibly updated) items for all configured categories,
+        return the combined, sorted list (no writing).
+        """
+        local_session = session or aiohttp.ClientSession()
+        feed_categories = self._feed_meta.categories or [c for c in FeedItemCategory]
+        feed_items = await self._feed_loader.get_feed_items()
+
+        try:
+            category_feeds = await asyncio.gather(
+                *[
+                    self._update_category_feed(
+                        local_session,
+                        category,
+                        [item for item in feed_items if item.category == category],
+                    )
+                    for category in feed_categories
+                ]
+            )
+        finally:
+            if session is None:
+                await local_session.close()
+
+        combined_feed: List[FeedItem] = []
+        for feed in category_feeds:
+            combined_feed.extend(feed)
+        combined_feed.sort(key=lambda item: item.id, reverse=True)
+        return combined_feed
+
     async def create_feed(
         self, session: Optional[aiohttp.ClientSession] = None
     ) -> None:

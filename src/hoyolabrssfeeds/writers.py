@@ -63,9 +63,9 @@ class JSONFeedFileWriter(AbstractFeedFileWriter):
             "version": "https://jsonfeed.org/version/1.1",
             "title": feed_meta.title or "{} News".format(feed_meta.game.name.title()),
             "language": str(feed_meta.language),
-            "home_page_url": "https://www.hoyolab.com/circles/{}".format(
-                feed_meta.game
-            ),
+            "home_page_url": str(feed_meta.home_page_url)
+            if feed_meta.home_page_url
+            else "https://www.hoyolab.com/circles/{}".format(feed_meta.game),
         }
 
         if self.config.url is not None:
@@ -93,10 +93,12 @@ class JSONFeedFileWriter(AbstractFeedFileWriter):
             "url": "https://www.hoyolab.com/article/{}".format(item.id),
             "title": item.title,
             "authors": [{"name": item.author}],
-            "tags": [item.category.name.title()],
+            "tags": [item.category.name.title()] + ([item.game.name.title()] if item.game else []),
             "content_html": item.content,
             "date_published": item.published.astimezone().isoformat(),
         }
+        if item.game is not None:
+            json_item["game"] = item.game.name
 
         if item.summary is not None:
             json_item["summary"] = item.summary
@@ -137,7 +139,9 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
             root,
             "link",
             {
-                "href": "https://www.hoyolab.com/circles/{}".format(feed_meta.game),
+                "href": str(feed_meta.home_page_url)
+                if feed_meta.home_page_url
+                else "https://www.hoyolab.com/circles/{}".format(feed_meta.game),
                 "rel": "alternate",
                 "type": "text/html",
             },
@@ -200,6 +204,10 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
             ElementTree.SubElement(
                 entry, "category", {"term": item.category.name.title()}
             )
+            if item.game is not None:
+                ElementTree.SubElement(
+                    entry, "category", {"term": item.game.name.title()}
+                )
 
             published_str = item.published.astimezone().isoformat()
             ElementTree.SubElement(entry, "published").text = published_str

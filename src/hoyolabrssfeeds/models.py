@@ -98,6 +98,7 @@ class FeedMeta(MyBaseModel):
     language: Language = Language.ENGLISH
     title: Optional[str] = None
     icon: Optional[HttpUrl] = None
+    home_page_url: Optional[HttpUrl] = None
 
 
 class FeedItem(MyBaseModel):
@@ -110,6 +111,7 @@ class FeedItem(MyBaseModel):
     updated: Optional[datetime] = None
     image: Optional[HttpUrl] = None
     summary: Optional[str] = None
+    game: Optional[Game] = None
 
 
 class FeedItemMeta(MyBaseModel):

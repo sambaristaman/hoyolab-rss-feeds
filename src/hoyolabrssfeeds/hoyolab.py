@@ -207,6 +207,7 @@ class HoyolabNews:
             "content": post["post"]["content"],
             "category": post["post"]["official_type"],
             "published": post["post"]["created_at"],
+            "game": self._game,
         }
 
         if "desc" in post["post"] and len(str(post["post"]["desc"]).strip()) > 0:
