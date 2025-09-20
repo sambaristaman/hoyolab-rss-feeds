@@ -2,17 +2,9 @@ name: Generate & Publish Global RSS (lean)
 
 on:
   schedule:
-    # twice daily (UTC)
     - cron: '0 2 * * *'
     - cron: '0 14 * * *'
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths:
-      - 'src/**'
-      - '.github/workflows/rss-pages.yml'
-      - 'pyproject.toml'
-      - 'hoyolab-rss-feeds.toml'
 
 permissions:
   contents: read
@@ -42,47 +34,44 @@ jobs:
 
       - name: Write custom config (genshin, starrail, honkai3rd)
         run: |
-          cat > hoyolab-rss-feeds.toml <<'EOF'
-  [genshin]
-  feed.json.path = "genshin.json"
-  
-  [starrail]
-  feed.json.path = "starrail.json"
-  
-  [honkai3rd]
-  feed.json.path = "honkai3rd.json"
-  EOF
+          rm -f hoyolab-rss-feeds.toml
+          echo "[genshin]"            >> hoyolab-rss-feeds.toml
+          echo "feed.json.path = \"genshin.json\""   >> hoyolab-rss-feeds.toml
+          echo ""                      >> hoyolab-rss-feeds.toml
+          echo "[starrail]"            >> hoyolab-rss-feeds.toml
+          echo "feed.json.path = \"starrail.json\""  >> hoyolab-rss-feeds.toml
+          echo ""                      >> hoyolab-rss-feeds.toml
+          echo "[honkai3rd]"           >> hoyolab-rss-feeds.toml
+          echo "feed.json.path = \"honkai3rd.json\"" >> hoyolab-rss-feeds.toml
 
-- name: Generate aggregated feeds
-  env:
-    PYTHONPATH: src
-  run: |
-    mkdir -p public
-    # Atom (RSS)
-    python -m hoyolabrssfeeds \
-      --single-feed-path public/index.xml \
-      --single-feed-format atom \
-      --single-feed-title "Hoyolab - All Games" \
-      --single-home-url "https://www.hoyolab.com/"
-    # Optional JSON mirror
-    python -m hoyolabrssfeeds \
-      --single-feed-path public/index.json \
-      --single-feed-format json \
-      --single-feed-title "Hoyolab - All Games" \
-      --single-home-url "https://www.hoyolab.com/"
+      - name: Generate aggregated feeds
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p public
+          python -m hoyolabrssfeeds \
+            --single-feed-path public/index.xml \
+            --single-feed-format atom \
+            --single-feed-title "Hoyolab - All Games" \
+            --single-home-url "https://www.hoyolab.com/"
+          python -m hoyolabrssfeeds \
+            --single-feed-path public/index.json \
+            --single-feed-format json \
+            --single-feed-title "Hoyolab - All Games" \
+            --single-home-url "https://www.hoyolab.com/"
 
-- name: Upload Pages artifact
-  uses: actions/upload-pages-artifact@v3
-  with:
-    path: public
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
 
-deploy:
-  needs: generate
-  runs-on: ubuntu-latest
-  environment:
-    name: github-pages
-    url: ${{ steps.deployment.outputs.page_url }}
-  steps:
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+  deploy:
+    needs: generate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
