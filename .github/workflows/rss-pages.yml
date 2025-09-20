@@ -1,13 +1,11 @@
 name: Generate & Publish Global RSS (lean)
 
 on:
-  # run twice daily (UTC): 02:00 and 14:00
   schedule:
+    # twice daily (UTC)
     - cron: '0 2 * * *'
     - cron: '0 14 * * *'
-  # allow manual runs from the Actions tab
   workflow_dispatch:
-  # optional: rebuild when source changes land on master
   push:
     branches: [ master ]
     paths:
@@ -22,7 +20,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -42,31 +40,35 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "aiohttp==3.11.18" "aiofiles==24.1.0" "pydantic>=1.10,<2"
 
-      - name: Ensure minimal config exists
+      - name: Write custom config (genshin, starrail, honkai3rd)
         run: |
-          if [ ! -f hoyolab-rss-feeds.toml ]; then
-            cat > hoyolab-rss-feeds.toml <<'EOF'
+          cat > hoyolab-rss-feeds.toml <<'EOF'
   [genshin]
   feed.json.path = "genshin.json"
+  
+  [starrail]
+  feed.json.path = "starrail.json"
+  
+  [honkai3rd]
+  feed.json.path = "honkai3rd.json"
   EOF
-  fi
 
 - name: Generate aggregated feeds
   env:
     PYTHONPATH: src
   run: |
     mkdir -p public
-    # Atom (good for RSS readers)
+    # Atom (RSS)
     python -m hoyolabrssfeeds \
       --single-feed-path public/index.xml \
       --single-feed-format atom \
-      --single-feed-title "Hoyolab – All Games" \
+      --single-feed-title "Hoyolab - All Games" \
       --single-home-url "https://www.hoyolab.com/"
     # Optional JSON mirror
     python -m hoyolabrssfeeds \
       --single-feed-path public/index.json \
       --single-feed-format json \
-      --single-feed-title "Hoyolab – All Games" \
+      --single-feed-title "Hoyolab - All Games" \
       --single-home-url "https://www.hoyolab.com/"
 
 - name: Upload Pages artifact
