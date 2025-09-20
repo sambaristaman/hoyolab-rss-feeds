@@ -4,5 +4,5 @@ feed.json.path = "genshin.json"
 [starrail]
 feed.json.path = "starrail.json"
 
-[honkai3rd]
-feed.json.path = "honkai3rd.json"
+[honkai]
+feed.json.path = "honkai.json"

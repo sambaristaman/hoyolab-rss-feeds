@@ -6,9 +6,11 @@ from typing import List
 from typing import Optional
 from typing import Type
 from typing import TypeVar
+import re
 
 from pydantic import BaseModel
 from pydantic import HttpUrl
+from pydantic import validator
 
 _IC = TypeVar("_IC", bound="FeedItemCategory")
 _G = TypeVar("_G", bound="Game")
@@ -112,6 +114,25 @@ class FeedItem(MyBaseModel):
     image: Optional[HttpUrl] = None
     summary: Optional[str] = None
     game: Optional[Game] = None
+
+    # --- normalization helpers for MonitorRSS rendering ---
+    @staticmethod
+    def _normalize_breaks(text: Optional[str]) -> Optional[str]:
+        if text is None:
+            return None
+        # convert <br>, <br/>, <br /> (case-insensitive) to real newlines
+        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+        # collapse 3+ consecutive newlines to just 2 (keeps readable spacing)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    @validator("content", pre=True)
+    def _content_to_newlines(cls, v: Optional[str]) -> Optional[str]:
+        return cls._normalize_breaks(v)
+
+    @validator("summary", pre=True)
+    def _summary_to_newlines(cls, v: Optional[str]) -> Optional[str]:
+        return cls._normalize_breaks(v)
 
 
 class FeedItemMeta(MyBaseModel):
