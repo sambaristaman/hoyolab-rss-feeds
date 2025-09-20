@@ -102,17 +102,27 @@ class JSONFeedFileWriter(AbstractFeedFileWriter):
     def create_json_feed_item(item: FeedItem) -> Dict[str, Any]:
         """Convert FeedItem to JSON-Feed item."""
 
+        # Prefer a plain-text version if the model exposes it
+        try:
+            content_text = item.content_plaintext()
+        except AttributeError:
+            # Fallback: naive HTML -> text (keeps things robust if method is absent)
+            import re as _re
+            content_text = _re.sub(r"(?is)<br\s*/?>", "\n", item.content)
+            content_text = _re.sub(r"(?is)</p\s*>", "\n\n", content_text)
+            content_text = _re.sub(r"(?is)<p[^>]*>", "", content_text)
+            content_text = _re.sub(r"(?is)<[^>]+>", "", content_text).strip()
+
         json_item = {
             "id": str(item.id),
             "url": "https://www.hoyolab.com/article/{}".format(item.id),
             "title": item.title,
             "authors": [{"name": item.author}],
-            "tags": [item.category.name.title()] + ([item.game.name.title()] if item.game else []),
-            "content_html": item.content,
+            "tags": [item.category.name.title()] + ([item.game.name.title()] if getattr(item, "game", None) else []),
+            "content_html": item.content,            # full HTML preserved
+            "content_text": content_text,            # plain-text twin
             "date_published": item.published.astimezone().isoformat(),
         }
-        if item.game is not None:
-            json_item["game"] = item.game.name
 
         if item.summary is not None:
             json_item["summary"] = item.summary
@@ -123,7 +133,9 @@ class JSONFeedFileWriter(AbstractFeedFileWriter):
         if item.image is not None:
             json_item["image"] = str(item.image)
 
-        json_item["content_text"] = _as_plain_text(item.content)
+        # Optional explicit origin game field
+        if getattr(item, "game", None) is not None:
+            json_item["hoyolab_game"] = item.game.name
 
         return json_item
 
@@ -192,11 +204,11 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
 
     @staticmethod
     def create_atom_feed_entries(
-        feed_items: List[FeedItem],
+            feed_items: List[FeedItem],
     ) -> List[ElementTree.Element]:
         """Create Atom feed entries from given feed items."""
 
-        entries = []
+        entries: List[ElementTree.Element] = []
 
         for item in feed_items:
             entry = ElementTree.Element("entry")
@@ -217,13 +229,11 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
                 },
             )
 
-            ElementTree.SubElement(
-                entry, "category", {"term": item.category.name.title()}
-            )
-            if item.game is not None:
-                ElementTree.SubElement(
-                    entry, "category", {"term": item.game.name.title()}
-                )
+            # Category (content type)
+            ElementTree.SubElement(entry, "category", {"term": item.category.name.title()})
+            # Category (game), if present
+            if getattr(item, "game", None) is not None:
+                ElementTree.SubElement(entry, "category", {"term": item.game.name.title()})
 
             published_str = item.published.astimezone().isoformat()
             ElementTree.SubElement(entry, "published").text = published_str
@@ -234,10 +244,21 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
             author = ElementTree.SubElement(entry, "author")
             ElementTree.SubElement(author, "name").text = item.author
 
-            ElementTree.SubElement(entry, "content", {"type": "text"}).text = _as_plain_text(item.content)
+            # Full HTML content (escaped as required by Atom when type="html")
+            ElementTree.SubElement(entry, "content", {"type": "html"}).text = item.content
 
-            if item.summary is not None:
-                ElementTree.SubElement(entry, "summary").text = item.summary
+            # Always provide a plain-text summary (good for consumers like MonitoRSS)
+            try:
+                summary_text = item.summary or item.content_plaintext()
+            except AttributeError:
+                # Fallback if the helper isn't present on the model
+                import re as _re
+                summary_text = item.summary or _re.sub(r"(?is)<[^>]+>", "", item.content)
+                summary_text = _re.sub(r"(?is)<br\s*/?>", "\n", summary_text)
+                summary_text = _re.sub(r"\n{3,}", "\n\n", summary_text).strip()
+
+            if summary_text:
+                ElementTree.SubElement(entry, "summary").text = summary_text
 
             entries.append(entry)
 
