@@ -35,14 +35,25 @@ jobs:
       - name: Write custom config (genshin, starrail, honkai)
         run: |
           rm -f hoyolab-rss-feeds.toml
-          echo "[genshin]"            >> hoyolab-rss-feeds.toml
-          echo "feed.json.path = \"genshin.json\""   >> hoyolab-rss-feeds.toml
-          echo ""                      >> hoyolab-rss-feeds.toml
-          echo "[starrail]"            >> hoyolab-rss-feeds.toml
-          echo "feed.json.path = \"starrail.json\""  >> hoyolab-rss-feeds.toml
-          echo ""                      >> hoyolab-rss-feeds.toml
-          echo "[honkai]"              >> hoyolab-rss-feeds.toml
-          echo "feed.json.path = \"honkai.json\""    >> hoyolab-rss-feeds.toml
+          {
+            echo "[genshin]"
+            echo 'feed.json.path = "genshin.json"'
+            echo
+            echo "[starrail]"
+            echo 'feed.json.path = "starrail.json"'
+            echo
+            echo "[honkai]"
+            echo 'feed.json.path = "honkai.json"'
+          } >> hoyolab-rss-feeds.toml
+
+      - name: Show config (sanity check)
+        run: |
+          echo "=== hoyolab-rss-feeds.toml ==="
+          cat hoyolab-rss-feeds.toml
+          echo "==============================="
+          if grep -qi 'honkai3rd' hoyolab-rss-feeds.toml; then
+            echo "::error ::Found invalid key 'honkai3rd' in config"; exit 1;
+          fi
 
       - name: Generate aggregated feeds
         env:
