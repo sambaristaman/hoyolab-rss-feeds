@@ -107,7 +107,7 @@ class FeedItem(MyBaseModel):
     id: int
     title: str
     author: str
-    content: str
+    content: str  # keep original HTML here (unchanged)
     category: FeedItemCategory
     published: datetime
     updated: Optional[datetime] = None
@@ -115,47 +115,82 @@ class FeedItem(MyBaseModel):
     summary: Optional[str] = None
     game: Optional[Game] = None
 
+    # -------- Plain-text helper (does NOT mutate content) --------
     @staticmethod
-    def _normalize_text(text: Optional[str]) -> Optional[str]:
+    def _html_to_plaintext(text: Optional[str]) -> Optional[str]:
+        """
+        Convert HTML to a readable plain-text snapshot for consumers like MonitorRSS,
+        without altering the original HTML stored in `content`.
+        - Convert <br> to newlines
+        - Convert paragraphs and list items into line breaks/bullets
+        - Drop most tags but keep link text with URL in parentheses, and keep
+          image alt/src as a short marker.
+        """
         if text is None:
             return None
 
-        # Unescape common HTML entities
-        text = (text
-                .replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">"))
+        # Normalise NBSP and basic entities first
+        txt = (text
+               .replace("&nbsp;", " ")
+               .replace("&amp;", "&")
+               .replace("&lt;", "<")
+               .replace("&gt;", ">"))
 
         # <br> variants → newline
-        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+        txt = re.sub(r"(?is)<br\s*/?>", "\n", txt)
 
-        # Paragraphs: close tag -> blank line; drop opening tags
-        text = re.sub(r"(?i)</p>", "\n\n", text)
-        text = re.sub(r"(?i)<p[^>]*>", "", text)
+        # Paragraphs: close tags -> blank line; remove opening <p ...>
+        txt = re.sub(r"(?is)</p\s*>", "\n\n", txt)
+        txt = re.sub(r"(?is)<p[^>]*>", "", txt)
 
-        # Lists: <li>…</li> → bullet points; drop <ul>/<ol>
-        text = re.sub(r"(?i)<li[^>]*>\s*", "• ", text)
-        text = re.sub(r"(?i)</li>\s*", "\n", text)
-        text = re.sub(r"(?i)</?(ul|ol)[^>]*>", "", text)
+        # Lists: <li>…</li> → bullets; drop list containers
+        txt = re.sub(r"(?is)<li[^>]*>\s*", "• ", txt)
+        txt = re.sub(r"(?is)</li\s*>", "\n", txt)
+        txt = re.sub(r"(?is)</?(ul|ol)[^>]*>", "", txt)
 
-        # Preserve <a> and <img> tags, remove others
-        text = re.sub(r"<(?!/?(a|img)(\s|>))[^\>]+>", "", text)
+        # Links: keep anchor text + URL in parentheses
+        def _a_sub(m):
+            href = m.group(1) or ""
+            inner = m.group(2) or ""
+            inner = re.sub(r"\s+", " ", inner).strip()
+            href = href.strip()
+            if inner and href:
+                return f"{inner} ({href})"
+            return inner or href
 
-        # Tidy whitespace: collapse multiple newlines
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        text = re.sub(r"[ \t]{2,}", " ", text)
+        txt = re.sub(r'(?is)<a[^>]*href="([^"]+)"[^>]*>(.*?)</a\s*>', _a_sub, txt)
 
-        return text.strip()
+        # Images: show a lightweight marker with alt/src
+        def _img_sub(m):
+            alt = (m.group(1) or "").strip()
+            src = (m.group(2) or "").strip()
+            if alt and src:
+                return f"[img: {alt} — {src}]"
+            if src:
+                return f"[img: {src}]"
+            return "[img]"
 
-    @validator("content", pre=True)
-    def _content_to_newlines(cls, v: Optional[str]) -> Optional[str]:
-        return cls._normalize_text(v)
+        txt = re.sub(r'(?is)<img[^>]*alt="([^"]*)"[^>]*src="([^"]+)"[^>]*>', _img_sub, txt)
+        txt = re.sub(r'(?is)<img[^>]*src="([^"]+)"[^>]*>', lambda m: f"[img: {m.group(1).strip()}]", txt)
 
+        # Strip any remaining tags
+        txt = re.sub(r"(?is)<[^>]+>", "", txt)
+
+        # Tidy whitespace
+        txt = re.sub(r"\r\n|\r", "\n", txt)
+        txt = re.sub(r"\n{3,}", "\n\n", txt)
+        txt = re.sub(r"[ \t]{2,}", " ", txt)
+
+        return txt.strip()
+
+    # If a summary comes from upstream HTML, normalize it to a plain-text snippet.
     @validator("summary", pre=True)
-    def _summary_to_newlines(cls, v: Optional[str]) -> Optional[str]:
-        return cls._normalize_text(v)
+    def _summary_to_plaintext(cls, v: Optional[str]) -> Optional[str]:
+        return cls._html_to_plaintext(v)
 
+    # Convenience: produce a plain-text snapshot of the HTML content
+    def content_plaintext(self) -> str:
+        return self._html_to_plaintext(self.content) or ""
 
 class FeedItemMeta(MyBaseModel):
     id: int
