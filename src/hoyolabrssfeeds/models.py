@@ -117,23 +117,48 @@ class FeedItem(MyBaseModel):
 
     # --- normalization helpers for MonitorRSS rendering ---
     @staticmethod
-    def _normalize_breaks(text: Optional[str]) -> Optional[str]:
+    def _normalize_text(text: Optional[str]) -> Optional[str]:
         if text is None:
             return None
-        # convert <br>, <br/>, <br /> (case-insensitive) to real newlines
+
+        # Unescape common HTML entities
+        text = (text
+                .replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">"))
+
+        # Convert <br>, <br/>, <br /> to newline (case-insensitive)
         text = re.sub(r"(?i)<br\s*/?>", "\n", text)
-        # collapse 3+ consecutive newlines to just 2 (keeps readable spacing)
+
+        # Convert paragraph boundaries </p><p> to double newline,
+        # then drop remaining <p> / </p> tags
+        text = re.sub(r"(?i)</p>\s*<p>", "\n\n", text)
+        text = re.sub(r"(?i)</?p[^>]*>", "", text)
+
+        # Lists: <li> -> "• " at start, </li> -> newline; drop <ul>/<ol> wrappers
+        text = re.sub(r"(?i)<li[^>]*>\s*", "• ", text)
+        text = re.sub(r"(?i)</li>\s*", "\n", text)
+        text = re.sub(r"(?i)</?(ul|ol)[^>]*>", "", text)
+
+        # Remove any remaining tags very conservatively
+        text = re.sub(r"<[^>]+>", "", text)
+
+        # Replace Hoyolab-style glyph bullets with a newline bullet
+        text = text.replace("▌", "\n• ").replace("■", "\n• ")
+
+        # Collapse 3+ consecutive newlines to 2
         text = re.sub(r"\n{3,}", "\n\n", text)
+
         return text.strip()
 
     @validator("content", pre=True)
     def _content_to_newlines(cls, v: Optional[str]) -> Optional[str]:
-        return cls._normalize_breaks(v)
+        return cls._normalize_text(v)
 
     @validator("summary", pre=True)
     def _summary_to_newlines(cls, v: Optional[str]) -> Optional[str]:
-        return cls._normalize_breaks(v)
-
+        return cls._normalize_text(v)
 
 class FeedItemMeta(MyBaseModel):
     id: int

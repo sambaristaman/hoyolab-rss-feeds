@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 from typing import Set
 from xml.etree import ElementTree
+import re
 
 import aiofiles
 
@@ -16,6 +17,19 @@ from .models import FeedItem
 from .models import FeedMeta
 from .models import FeedType
 
+def _as_plain_text(html: str) -> str:
+    # Minimal duplicate of model’s normalization in case content slipped through
+    html = (html or "").replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    html = re.sub(r"(?i)<br\s*/?>", "\n", html)
+    html = re.sub(r"(?i)</p>\s*<p>", "\n\n", html)
+    html = re.sub(r"(?i)</?p[^>]*>", "", html)
+    html = re.sub(r"(?i)<li[^>]*>\s*", "• ", html)
+    html = re.sub(r"(?i)</li>\s*", "\n", html)
+    html = re.sub(r"(?i)</?(ul|ol)[^>]*>", "", html)
+    html = re.sub(r"<[^>]+>", "", html)
+    html = html.replace("▌", "\n• ").replace("■", "\n• ")
+    html = re.sub(r"\n{3,}", "\n\n", html)
+    return html.strip()
 
 class AbstractFeedFileWriter(metaclass=ABCMeta):
     """ABC for feed file writing functionality."""
@@ -108,6 +122,8 @@ class JSONFeedFileWriter(AbstractFeedFileWriter):
 
         if item.image is not None:
             json_item["image"] = str(item.image)
+
+        json_item["content_text"] = _as_plain_text(item.content)
 
         return json_item
 
@@ -218,9 +234,7 @@ class AtomFeedFileWriter(AbstractFeedFileWriter):
             author = ElementTree.SubElement(entry, "author")
             ElementTree.SubElement(author, "name").text = item.author
 
-            ElementTree.SubElement(entry, "content", {"type": "html"}).text = (
-                item.content
-            )
+            ElementTree.SubElement(entry, "content", {"type": "text"}).text = _as_plain_text(item.content)
 
             if item.summary is not None:
                 ElementTree.SubElement(entry, "summary").text = item.summary
