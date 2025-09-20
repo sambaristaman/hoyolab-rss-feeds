@@ -128,30 +128,36 @@ class FeedItem(MyBaseModel):
                 .replace("&lt;", "<")
                 .replace("&gt;", ">"))
 
-        # Convert <br>, <br/>, <br /> to newline (case-insensitive)
+        # <br> variants → newline
         text = re.sub(r"(?i)<br\s*/?>", "\n", text)
 
-        # Convert paragraph boundaries </p><p> to double newline,
-        # then drop remaining <p> / </p> tags
+        # Paragraphs: </p><p> → blank line; drop remaining <p> tags
         text = re.sub(r"(?i)</p>\s*<p>", "\n\n", text)
         text = re.sub(r"(?i)</?p[^>]*>", "", text)
 
-        # Lists: <li> -> "• " at start, </li> -> newline; drop <ul>/<ol> wrappers
+        # Lists: <li>…</li>, drop <ul>/<ol>
         text = re.sub(r"(?i)<li[^>]*>\s*", "• ", text)
         text = re.sub(r"(?i)</li>\s*", "\n", text)
         text = re.sub(r"(?i)</?(ul|ol)[^>]*>", "", text)
 
-        # Remove any remaining tags very conservatively
+        # Strip any remaining tags
         text = re.sub(r"<[^>]+>", "", text)
 
-        # Replace Hoyolab-style glyph bullets with a newline bullet
+        # Hoyolab glyph bullets → newline bullets
         text = text.replace("▌", "\n• ").replace("■", "\n• ")
 
-        # Collapse 3+ consecutive newlines to 2
+        # INSERT MISSING SPACE after punctuation when next char is a letter/number
+        # e.g., "Destiny.After" → "Destiny. After"
+        text = re.sub(r"([.!?;:])(?!\s)(?=[A-Za-z0-9])", r"\1 ", text)
+
+        # Normalize whitespace: collapse 3+ newlines to 2; collapse 2+ spaces to 1
         text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+
+        # Tidy bullets: avoid lines that start with "•" immediately followed by punctuation
+        text = re.sub(r"\n•\s*([.;,:])", r"\n\1", text)
 
         return text.strip()
-
     @validator("content", pre=True)
     def _content_to_newlines(cls, v: Optional[str]) -> Optional[str]:
         return cls._normalize_text(v)
